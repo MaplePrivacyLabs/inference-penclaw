@@ -1,0 +1,66 @@
+name: Tinfoil Release
+run-name: Prepare Tinfoil release ${{ inputs.version }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Stable staging release version (for example, v0.1.0)
+        required: true
+        type: string
+
+concurrency:
+  group: tinfoil-release-prepare-${{ inputs.version }}
+
+jobs:
+  prepare-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: write
+
+    steps:
+      - name: Check out the requested commit
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        with:
+          persist-credentials: false
+
+      - name: Validate the committed staging configuration
+        shell: bash
+        env:
+          VERSION: ${{ inputs.version }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          if [[ "$GITHUB_REF" != "refs/heads/$DEFAULT_BRANCH" ]]; then
+            echo "::error::Run this workflow on the repository's default branch."
+            exit 1
+          fi
+          if [[ ! "$VERSION" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+            echo "::error::Choose a stable version such as v0.1.0."
+            exit 1
+          fi
+          git ls-files --error-unmatch tinfoil-config.yml >/dev/null
+          python3 render_config.py --check
+          git diff --exit-code -- tinfoil-config.yml
+
+      - name: Tag the validated commit and dispatch measurement
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          tag_ref="refs/tags/$VERSION"
+          existing_commit=$(git ls-remote --refs origin "$tag_ref" | cut -f 1)
+          if [[ -z "$existing_commit" ]]; then
+            gh api --method POST "repos/$GH_REPO/git/refs" \
+              -f ref="$tag_ref" -f sha="$GITHUB_SHA" --silent
+          elif [[ "$existing_commit" != "$GITHUB_SHA" ]]; then
+            echo "::error::The release tag already points to another commit. Choose a new version."
+            exit 1
+          elif gh release view "$VERSION" >/dev/null 2>&1; then
+            echo "Release $VERSION is already published."
+            exit 0
+          fi
+
+          gh workflow run tinfoil-release-publish.yml --ref "$VERSION"

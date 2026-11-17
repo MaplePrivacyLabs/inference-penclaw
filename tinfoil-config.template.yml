@@ -1,0 +1,131 @@
+cvm-version: 0.14.17
+cpus: 32
+memory: 524288
+gpus: 8
+models:
+  - name: penclaw-kimi-k3-1-pro
+    repo: audnai/penclaw-Kimi-K3.1-pro-unrestricted@781d40495beb276fc52d0afd470a5aad1fd5d1bf
+    mpk: "__PENCLAW_MPK__"
+    schema: 2
+
+containers:
+- name: penclaw-kimi-k3-1-pro
+  image: "ghcr.io/tinfoilsh/confidential-kimi-k31-pro@sha256:a74bdc3660cd5aaca97528e8e07930e7117b9f0d0cdb6dbde84745d02a09ffde" # v0.0.3
+  runtime: nvidia
+  read_only: true
+  gpus: all
+  restart: always
+  secrets:
+  - VLLM_API_KEY
+  - METRICS_API_KEY
+  entrypoint:
+  - python3
+  - -c
+  - |
+__PENCLAW_VERIFIER__
+  env:
+  - HF_HUB_OFFLINE: '1'
+  - TRANSFORMERS_OFFLINE: '1'
+  - MAPLE_PENCLAW_SNAPSHOT: |-
+__PENCLAW_SNAPSHOT__
+  - VLLM_DISABLE_UVA: '1'
+  - VLLM_KIMI_K3_LATENT_MOE_TAIL_FUSION: '0'
+  - VLLM_ALLREDUCE_USE_SYMM_MEM: '0'
+  - VLLM_ALLREDUCE_USE_FLASHINFER: '1'
+  - VLLM_ALLREDUCE_USE_FLASHINFER_PCIE_IPC: '0'
+  - VLLM_USE_NCCL_SYMM_MEM: '0'
+  - VLLM_KIMI_K3_GEMM_AR: '0'
+  - VLLM_ENABLE_GEMM_RS: '0'
+  - NCCL_NVLS_ENABLE: '0'
+  - VLLM_USE_DIRECT_DCP_A2A: '0'
+  - VLLM_USE_DIRECT_DCP_Q_GATHER: '0'
+  - VLLM_USE_DIRECT_DCP_KV_GATHER: '0'
+  - VLLM_ENGINE_READY_TIMEOUT_S: '3600'
+  - VLLM_USE_V2_MODEL_RUNNER: '1'
+  - VLLM_USE_RUST_FRONTEND: '0'
+  - PYTORCH_CUDA_ALLOC_CONF: expandable_segments:False
+  - PYTORCH_ALLOC_CONF: expandable_segments:False
+  - VLLM_CACHE_ROOT: /root/.cache/vllm
+  - TRITON_CACHE_DIR: /root/.cache/triton
+  - TORCHINDUCTOR_CACHE_DIR: /root/.cache/inductor
+  - TORCH_EXTENSIONS_DIR: /root/.cache/torch-extensions
+  - FLASHINFER_WORKSPACE_BASE: /root/.cache/flashinfer
+  - NUMBA_CACHE_DIR: /root/.cache/numba
+  - VLLM_FLASHINFER_ALLREDUCE_BACKEND: trtllm
+  - FLASHINFER_NO_DOWNLOAD: '1'
+  command:
+  - --model
+  - /tinfoil/mpk/mpk-__PENCLAW_ROOT__
+  - --served-model-name
+  - penclaw-kimi-k3-1-pro
+  - --tensor-parallel-size
+  - '8'
+  - --decode-context-parallel-size
+  - '8'
+  - --dcp-comm-backend
+  - a2a
+  - --load-format
+  - fastsafetensors
+  - --trust-remote-code
+  - --kv-cache-dtype
+  - fp8
+  - --attention-backend
+  - FLASHINFER_MLA_SPARSE
+  - --attention-config
+  - '{"indexer_kv_dtype":"fp8","use_prefill_query_quantization":true}'
+  - --kernel-config
+  - '{"flashinfer_sparse_mla_kernel":"trtllm"}'
+  - --disable-custom-all-reduce
+  - --mm-encoder-tp-mode
+  - data
+  - --enable-auto-tool-choice
+  - --tool-call-parser
+  - kimi_k3
+  - --reasoning-parser
+  - kimi_k3
+  - --enable-prompt-tokens-details
+  - --enable-force-include-usage
+  - --scheduling-policy
+  - priority
+  - --port
+  - '8001'
+  - --max-model-len
+  - '262144'
+  - --max-num-seqs
+  - '32'
+  - --max-num-batched-tokens
+  - '16384'
+  - --enable-prefix-caching
+  - --prefix-match-unit
+  - '128'
+  - --mamba-cache-mode
+  - align
+  - --mamba-ssm-cache-dtype
+  - float32
+  - --no-enable-flashinfer-autotune
+  - --gpu-memory-utilization
+  - '0.95'
+  - --compilation-config
+  - '{"pass_config":{"fuse_allreduce_rms":false},"cudagraph_capture_sizes":[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,18,20,24,25,30,32,35,36,40,42,45,48,50,54,55,60,64,65,66,70,72,75,78,80,84,85,90,95,96,100,102,105,108,110,114,115,120,125,126,128,130,132,135,138,140,144,145,150,155,156,160,162,168,174,180,186,192],"max_cudagraph_capture_size":192}'
+  - --additional-config
+  - '{"decode_backend":"auto","kda_spec_decode_backend":"flashinfer"}'
+  tmpfs:
+    /tmp: size=1g,mode=1777,exec
+    /root: size=20g,mode=0700,exec
+  healthcheck:
+    test:
+    - CMD
+    - curl
+    - -sf
+    - http://localhost:8001/health
+    interval: 30s
+    timeout: 5s
+    start_period: 120m
+shim:
+  upstream-port: 8001
+  authenticated: false
+  paths:
+  - /health
+  - /v1/models
+  - /v1/chat/completions
+  - /v1/responses
