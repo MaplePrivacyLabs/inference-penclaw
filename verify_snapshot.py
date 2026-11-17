@@ -40,11 +40,14 @@ def main():
     if len(arguments) < 2 or arguments[0] != "--model" or arguments.count("--model") != 1:
         raise ValueError("Expected one explicit mount as the first --model argument")
     manifest = json.loads(os.environ.pop("MAPLE_PENCLAW_SNAPSHOT"))
-    if not os.environ.get("VLLM_API_KEY") or not os.environ.get("METRICS_API_KEY"):
+    bearer = os.environ.pop("PENCLAW_STAGE_API_KEY", "")
+    if not bearer or not os.environ.get("METRICS_API_KEY"):
         raise ValueError("Required serving or metrics credential is missing")
 
     verify_snapshot(Path(arguments[1]), manifest)
     print(f"Verified {len(manifest['files'])} checkpoint files for {manifest['repo']}@{manifest['revision']}", flush=True)
+    os.environ["VLLM_API_KEY"] = bearer
+    os.environ.pop("METRICS_API_KEY")
     sidecar = "/opt/tinfoil/inference-sidecar"
     os.execv(sidecar, [sidecar, "vllm", "serve", *arguments])
 

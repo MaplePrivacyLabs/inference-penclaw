@@ -16,7 +16,7 @@ containers:
   gpus: all
   restart: always
   secrets:
-  - VLLM_API_KEY
+  - PENCLAW_STAGE_API_KEY
   - METRICS_API_KEY
   entrypoint:
   - python3
