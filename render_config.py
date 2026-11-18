@@ -22,6 +22,7 @@ EXPERIMENT_EDITS = [
     ("cpus: 32\n", "cpus: 120\n"),
     ("  - /health\n", "  - /health\n  - /metrics\n"),
     ('"num_speculative_tokens":5', '"num_speculative_tokens":3'),
+    ("  - /v1/responses\n", "  - /v1/responses\n  - /v1/messages\n  - /v1/messages/count_tokens\n"),
 ]
 
 
