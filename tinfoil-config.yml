@@ -1,5 +1,5 @@
 cvm-version: 0.14.17
-cpus: 112
+cpus: 120
 memory: 524288
 gpus: 8
 models:
