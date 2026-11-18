@@ -14,7 +14,7 @@ containers:
   runtime: nvidia
   read_only: true
   gpus: all
-  restart: always
+  restart: "no"
   secrets:
   - PENCLAW_STAGE_API_KEY
   - METRICS_API_KEY
@@ -112,15 +112,6 @@ __PENCLAW_SNAPSHOT__
   tmpfs:
     /tmp: size=1g,mode=1777,exec
     /root: size=20g,mode=0700,exec
-  healthcheck:
-    test:
-    - CMD
-    - curl
-    - -sf
-    - http://localhost:8001/health
-    interval: 30s
-    timeout: 5s
-    start_period: 120m
 shim:
   upstream-port: 8001
   authenticated: false
