@@ -14,6 +14,14 @@ MPK_PATTERN = r"([0-9a-f]{64})_([1-9][0-9]*)_([0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-
 STOCK_REPO = "moonshotai/Kimi-K3.1-Pro@6d0a0202956796543364d666ab19c6ad1a494ee1"
 STOCK_MPK = "8d9c355a94e60f43598713759028328bbe795336f2700799d0ff4f3898e785e0_1561355993088_97fb42e4-45a9-5745-813b-61cb6ddb043d"
 STOCK_CONFIG_SHA256 = "2400260beabc0fe45b1c959a29c1401fbd703d6b233efa7de883eccba29de68b"
+# Performance experiments on the staging node (see EXPERIMENTS.md). Each entry is
+# (text in stock v0.0.3, text in this template). Undoing every entry must give
+# back the stock configuration exactly, so the template can only differ from
+# stock in the ways listed here and in the primary model fields.
+EXPERIMENT_EDITS = [
+    ("cpus: 32\n", "cpus: 112\n"),
+    ("  - /health\n", "  - /health\n  - /metrics\n"),
+]
 
 
 def render(mpk):
@@ -42,6 +50,10 @@ def render(mpk):
 
     template = (ROOT / "tinfoil-config.template.yml").read_bytes().decode("utf-8")
     stock = template
+    for stock_text, experiment_text in EXPERIMENT_EDITS:
+        if stock.count(experiment_text) != 1:
+            raise ValueError(f"Expected one experiment edit matching {experiment_text!r}")
+        stock = stock.replace(experiment_text, stock_text)
     stock_values = {
         f"repo: {REPO}@{REVISION}": f"repo: {STOCK_REPO}",
         "mpk: __PENCLAW_MPK__\n  schema: 2": f"mpk: {STOCK_MPK}\n  schema: 1",
@@ -52,7 +64,7 @@ def render(mpk):
             raise ValueError(f"Expected one primary model field matching {marker!r}")
         stock = stock.replace(marker, value)
     if hashlib.sha256(stock.encode("utf-8")).hexdigest() != STOCK_CONFIG_SHA256:
-        raise ValueError("Template differs from stock v0.0.3 outside the primary model fields")
+        raise ValueError("Template differs from stock v0.0.3 outside the primary model fields and the listed experiment edits")
 
     return template.replace("__PENCLAW_MPK__", mpk).replace("__PENCLAW_ROOT__", pack[1])
 

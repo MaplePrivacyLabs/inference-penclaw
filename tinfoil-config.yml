@@ -1,5 +1,5 @@
 cvm-version: 0.14.17
-cpus: 32
+cpus: 112
 memory: 524288
 gpus: 8
 models:
@@ -119,3 +119,4 @@ shim:
   - /v1/models
   - /v1/responses
   - /health
+  - /metrics

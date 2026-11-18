@@ -1,5 +1,8 @@
 # Penclaw Kimi K3.1 Pro staging
 
+Releases after v0.1.4 are performance experiments and differ from the stock
+configuration in the ways listed in [EXPERIMENTS.md](EXPERIMENTS.md).
+
 The v0.1.4 configuration serves Audn's Penclaw checkpoint using the
 [Maple Kimi v0.0.3 configuration](https://github.com/MaplePrivacyLabs/inference-kimi-k3-1-pro/blob/06a62d7829bdb30237846544874830a86305e9f8/tinfoil-config.yml).
 It changes the primary checkpoint repository and revision, Modelwrap tuple,
