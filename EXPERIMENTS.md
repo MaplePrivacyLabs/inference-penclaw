@@ -11,6 +11,7 @@ refuses to render a template that differs in any other way.
 |---|---|---|
 | v0.1.5 | `cpus` 32 to 112; `/metrics` added to the shim paths. **Never deployed:** the platform accepts only 2, 4, 8, 16, 32, 56, 64, 120 or 128 vCPUs and rejected 112 at update planning | The identical host class runs two 56-vCPU guests, so 32 vCPUs for eight GPUs looked low. vLLM's Prometheus metrics give running and waiting requests, token counters, latency histograms and speculative-decoding acceptance, which have never been readable on this node. |
 | v0.1.6 | `cpus` 120 in place of 112; otherwise v0.1.5 | Nearest accepted size above the 112 vCPUs that two DeepSeek guests use on the identical host class. |
+| v0.1.7 | DSpark draft tokens 5 to 3 | On v0.1.6 the draft tokens were accepted 65%, 40%, 23%, 13% and 7% of the time by position: the fourth and fifth add about 0.2 tokens per step while every step carries a third more rows. Result on v0.1.6 for comparison: 128-134 tokens/s for one request, 549-603 at 8, 1,358-1,378 at 32. |
 
 `/metrics` is reachable without a key while `shim.authenticated` is false. It
 exposes counters and histograms, not request content. Remove it again before

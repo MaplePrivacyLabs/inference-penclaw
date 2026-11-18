@@ -21,6 +21,7 @@ STOCK_CONFIG_SHA256 = "2400260beabc0fe45b1c959a29c1401fbd703d6b233efa7de883eccba
 EXPERIMENT_EDITS = [
     ("cpus: 32\n", "cpus: 120\n"),
     ("  - /health\n", "  - /health\n  - /metrics\n"),
+    ('"num_speculative_tokens":5', '"num_speculative_tokens":3'),
 ]
 
 

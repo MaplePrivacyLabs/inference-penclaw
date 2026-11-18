@@ -98,7 +98,7 @@ containers:
   - --additional-config
   - '{"decode_backend":"auto","kda_spec_decode_backend":"flashinfer"}'
   - --speculative-config
-  - '{"model":"/tinfoil/mpk/mpk-37e89ad461fa86eddb78d2552fc7ddcfff6a5543086c08c8d03164609b2a65ba","method":"dspark","num_speculative_tokens":5,"draft_sample_method":"probabilistic","rejection_sample_method":"standard","attention_backend":"FLASHINFER_MLA","kv_cache_dtype":"fp8"}'
+  - '{"model":"/tinfoil/mpk/mpk-37e89ad461fa86eddb78d2552fc7ddcfff6a5543086c08c8d03164609b2a65ba","method":"dspark","num_speculative_tokens":3,"draft_sample_method":"probabilistic","rejection_sample_method":"standard","attention_backend":"FLASHINFER_MLA","kv_cache_dtype":"fp8"}'
   tmpfs:
     /tmp: size=1g,mode=1777,exec
     /root: size=20g,mode=0700,exec
