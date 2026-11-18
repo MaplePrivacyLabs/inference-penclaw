@@ -1,16 +1,19 @@
-"""Render or check the measured Tinfoil config for one completed schema-2 pack."""
+"""Render the stock Kimi configuration with the Penclaw primary pack."""
 
 import argparse
+import hashlib
 import json
 from pathlib import Path
 import re
-from textwrap import indent
 
 
 ROOT = Path(__file__).resolve().parent
 REPO = "audnai/penclaw-Kimi-K3.1-pro-unrestricted"
 REVISION = "781d40495beb276fc52d0afd470a5aad1fd5d1bf"
 MPK_PATTERN = r"([0-9a-f]{64})_([1-9][0-9]*)_([0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12})"
+STOCK_REPO = "moonshotai/Kimi-K3.1-Pro@6d0a0202956796543364d666ab19c6ad1a494ee1"
+STOCK_MPK = "8d9c355a94e60f43598713759028328bbe795336f2700799d0ff4f3898e785e0_1561355993088_97fb42e4-45a9-5745-813b-61cb6ddb043d"
+STOCK_CONFIG_SHA256 = "2400260beabc0fe45b1c959a29c1401fbd703d6b233efa7de883eccba29de68b"
 
 
 def render(mpk):
@@ -37,21 +40,21 @@ def render(mpk):
     if int(pack[2]) < sum(entry["size"] for entry in files.values()):
         raise ValueError("Modelwrap offset is smaller than this checkpoint")
 
-    template = (ROOT / "tinfoil-config.template.yml").read_text()
-    if template.count(f"repo: {REPO}@{REVISION}") != 1:
-        raise ValueError("Config must pin the manifest revision")
-    replacements = {
-        "MPK": mpk,
-        "ROOT": pack[1],
-        "VERIFIER": indent((ROOT / "verify_snapshot.py").read_text().rstrip(), "    "),
-        "SNAPSHOT": indent(json.dumps(manifest, indent=2), "      "),
+    template = (ROOT / "tinfoil-config.template.yml").read_bytes().decode("utf-8")
+    stock = template
+    stock_values = {
+        f"repo: {REPO}@{REVISION}": f"repo: {STOCK_REPO}",
+        "mpk: __PENCLAW_MPK__\n  schema: 2": f"mpk: {STOCK_MPK}\n  schema: 1",
+        "__PENCLAW_ROOT__": STOCK_MPK.split("_", 1)[0],
     }
-    for key, value in replacements.items():
-        placeholder = f"__PENCLAW_{key}__"
-        if template.count(placeholder) != 1:
-            raise ValueError(f"Expected one config placeholder for {key}")
-        template = template.replace(placeholder, value)
-    return template
+    for marker, value in stock_values.items():
+        if stock.count(marker) != 1:
+            raise ValueError(f"Expected one primary model field matching {marker!r}")
+        stock = stock.replace(marker, value)
+    if hashlib.sha256(stock.encode("utf-8")).hexdigest() != STOCK_CONFIG_SHA256:
+        raise ValueError("Template differs from stock v0.0.3 outside the primary model fields")
+
+    return template.replace("__PENCLAW_MPK__", mpk).replace("__PENCLAW_ROOT__", pack[1])
 
 
 def main():
@@ -63,12 +66,12 @@ def main():
     args = parser.parse_args()
     try:
         if args.check:
-            config = args.output.read_text()
-            packs = re.findall(r'^    mpk: "([^"\n]+)"$', config, re.MULTILINE)
-            if len(packs) != 1 or config != render(packs[0]):
-                raise ValueError("Measured config must match a fresh render of the declared pack")
+            config = args.output.read_bytes().decode("utf-8")
+            packs = re.findall(r"^  mpk: (\S+)$", config, re.MULTILINE)
+            if len(packs) != 2 or config != render(packs[0]):
+                raise ValueError("Measured config must match the rendered primary and stock draft packs")
         else:
-            args.output.write_text(render(args.mpk))
+            args.output.write_bytes(render(args.mpk).encode("utf-8"))
     except (KeyError, OSError, ValueError) as error:
         parser.exit(1, f"{error}\n")
 
