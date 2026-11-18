@@ -10,7 +10,7 @@ models:
 
 containers:
 - name: penclaw-kimi-k3-1-pro
-  image: "ghcr.io/tinfoilsh/confidential-kimi-k31-pro@sha256:a74bdc3660cd5aaca97528e8e07930e7117b9f0d0cdb6dbde84745d02a09ffde" # v0.0.3
+  image: "ghcr.io/tinfoilsh/confidential-kimi-k31-pro@sha256:0a81868bb275945f23e0e71d53524dd9a416bfcde3acb14903af0c2139495bc0" # v0.0.2
   runtime: nvidia
   read_only: true
   gpus: all
@@ -43,8 +43,7 @@ __PENCLAW_SNAPSHOT__
   - VLLM_ENGINE_READY_TIMEOUT_S: '3600'
   - VLLM_USE_V2_MODEL_RUNNER: '1'
   - VLLM_USE_RUST_FRONTEND: '0'
-  - PYTORCH_CUDA_ALLOC_CONF: expandable_segments:False
-  - PYTORCH_ALLOC_CONF: expandable_segments:False
+  - PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
   - VLLM_CACHE_ROOT: /root/.cache/vllm
   - TRITON_CACHE_DIR: /root/.cache/triton
   - TORCHINDUCTOR_CACHE_DIR: /root/.cache/inductor
@@ -61,9 +60,7 @@ __PENCLAW_SNAPSHOT__
   - --tensor-parallel-size
   - '8'
   - --decode-context-parallel-size
-  - '8'
-  - --dcp-comm-backend
-  - a2a
+  - '1'
   - --load-format
   - fastsafetensors
   - --trust-remote-code
@@ -73,8 +70,6 @@ __PENCLAW_SNAPSHOT__
   - FLASHINFER_MLA_SPARSE
   - --attention-config
   - '{"indexer_kv_dtype":"fp8","use_prefill_query_quantization":true}'
-  - --kernel-config
-  - '{"flashinfer_sparse_mla_kernel":"trtllm"}'
   - --disable-custom-all-reduce
   - --mm-encoder-tp-mode
   - data
@@ -96,8 +91,6 @@ __PENCLAW_SNAPSHOT__
   - --max-num-batched-tokens
   - '16384'
   - --enable-prefix-caching
-  - --prefix-match-unit
-  - '128'
   - --mamba-cache-mode
   - align
   - --mamba-ssm-cache-dtype

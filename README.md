@@ -1,7 +1,7 @@
 # Penclaw Kimi K3.1 Pro staging
 
 This repository defines a dedicated Tinfoil staging deployment, based on the
-[Tinfoil Kimi v0.0.3 runtime](https://github.com/tinfoilsh/confidential-kimi-k3-1-pro/tree/v0.0.3).
+[Tinfoil Kimi v0.0.2 runtime](https://github.com/tinfoilsh/confidential-kimi-k3-1-pro/tree/v0.0.2).
 The template uses one confidential VM with eight B300 GPUs and an authenticated
 vLLM endpoint.
 
