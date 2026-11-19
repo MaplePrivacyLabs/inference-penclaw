@@ -5,10 +5,10 @@ not the one the guard was written against, so a changed base image fails the
 build instead of shipping a guard that no longer covers /metrics.
 """
 
-import importlib
 import importlib.util
-import inspect
 import shutil
+import subprocess
+import sys
 from importlib.metadata import version
 from pathlib import Path
 
@@ -57,11 +57,28 @@ def main():
     shutil.copyfile(SOURCE, target)
     target.chmod(0o644)
 
-    module = importlib.import_module("maple_metrics_auth")
-    if Path(module.__file__).resolve() != target.resolve():
-        raise SystemExit(f"Imported {module.__file__}, expected {target}")
-    if not inspect.isclass(module.MetricsAuthMiddleware):
-        raise SystemExit("MetricsAuthMiddleware must be a class")
+    # Import it the way the server will: a fresh interpreter that cannot see
+    # this script's directory, where the source copy still sits.
+    probe = subprocess.run(
+        [
+            sys.executable,
+            "-B",
+            "-I",
+            "-c",
+            "import inspect, maple_metrics_auth as m; "
+            "assert inspect.isclass(m.MetricsAuthMiddleware); print(m.__file__)",
+        ],
+        cwd="/",
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    imported = probe.stdout.strip()
+    if probe.returncode != 0 or Path(imported).resolve() != target.resolve():
+        raise SystemExit(
+            f"The installed guard does not import from {target}: "
+            f"exit {probe.returncode}, imported {imported!r}, {probe.stderr.strip()!r}"
+        )
     print(f"Installed {target} for vllm {installed}")
 
 
