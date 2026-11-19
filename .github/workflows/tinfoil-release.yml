@@ -1,3 +1,6 @@
+# Two-phase Tinfoil release. Builds the image, pins its digest in the
+# configuration on a release-only commit, tags that commit, then dispatches
+# measurement on the tag.
 name: Tinfoil Release
 run-name: Prepare Tinfoil release ${{ inputs.version }}
 
@@ -5,7 +8,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: Stable staging release version (for example, v0.1.0)
+        description: Stable release version (for example, v0.2.0)
         required: true
         type: string
 
@@ -13,11 +16,14 @@ concurrency:
   group: tinfoil-release-prepare-${{ inputs.version }}
 
 jobs:
-  prepare-release:
+  build:
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     permissions:
-      contents: write
-      actions: write
+      contents: read
+      packages: write
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
 
     steps:
       - name: Check out the requested commit
@@ -25,7 +31,8 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Validate the committed staging configuration
+      - name: Validate the source and the requested version
+        id: release
         shell: bash
         env:
           VERSION: ${{ inputs.version }}
@@ -36,31 +43,101 @@ jobs:
             exit 1
           fi
           if [[ ! "$VERSION" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
-            echo "::error::Choose a stable version such as v0.1.0."
+            echo "::error::Choose a stable version such as v0.2.0."
             exit 1
           fi
+          if git ls-remote --exit-code --tags origin "refs/tags/$VERSION" >/dev/null; then
+            echo "::error::Tag $VERSION already exists. Choose a new version."
+            exit 1
+          else
+            status=$?
+            if [[ "$status" != 2 ]]; then exit "$status"; fi
+          fi
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -v
           git ls-files --error-unmatch tinfoil-config.yml >/dev/null
           python3 render_config.py --check
           git diff --exit-code -- tinfoil-config.yml
+          echo "image-tag=${VERSION#v}" >> "$GITHUB_OUTPUT"
 
-      - name: Tag the validated commit and dispatch measurement
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4.0.0
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata for Docker
+        id: meta
+        uses: docker/metadata-action@030e881283bb7a6894de51c315a6bfe6a94e05cf # v6.0.0
+        with:
+          images: ghcr.io/${{ github.repository }}
+          flavor: latest=false
+          tags: |
+            type=raw,value=${{ steps.release.outputs.image-tag }}
+          labels: |
+            org.opencontainers.image.version=${{ inputs.version }}
+
+      - name: Build and push the image
+        id: build
+        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # v7.1.0
+        env:
+          SOURCE_DATE_EPOCH: 0
+        with:
+          context: .
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+
+  prepare-release:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      actions: write
+
+    steps:
+      - name: Check out the source commit
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Check out the pinned configuration updater
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        with:
+          repository: tinfoilsh/update-container-action
+          ref: 5e0a3789316941664cee055706799114e0180565 # v0.6.0
+          path: .release-tools
+          persist-credentials: false
+
+      - name: Pin the built image and create the release tag
         shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ inputs.version }}
+          IMAGE_REFS: |
+            ghcr.io/mapleprivacylabs/inference-penclaw@${{ needs.build.outputs.digest }}
+        run: |
+          python3 .release-tools/update_config.py
+          python3 render_config.py --check --require-pinned-image
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          source_date=$(git show -s --format=%cI "$GITHUB_SHA")
+          export GIT_AUTHOR_DATE="$source_date" GIT_COMMITTER_DATE="$source_date"
+          git add tinfoil-config.yml
+          git commit -m "chore: prepare $VERSION release"
+          git tag "$VERSION"
+          gh auth setup-git
+          git push origin "refs/tags/$VERSION"
+
+      - name: Dispatch measurement on the new tag
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
           VERSION: ${{ inputs.version }}
-        run: |
-          tag_ref="refs/tags/$VERSION"
-          existing_commit=$(git ls-remote --refs origin "$tag_ref" | cut -f 1)
-          if [[ -z "$existing_commit" ]]; then
-            gh api --method POST "repos/$GH_REPO/git/refs" \
-              -f ref="$tag_ref" -f sha="$GITHUB_SHA" --silent
-          elif [[ "$existing_commit" != "$GITHUB_SHA" ]]; then
-            echo "::error::The release tag already points to another commit. Choose a new version."
-            exit 1
-          elif gh release view "$VERSION" >/dev/null 2>&1; then
-            echo "Release $VERSION is already published."
-            exit 0
-          fi
-
-          gh workflow run tinfoil-release-publish.yml --ref "$VERSION"
+        run: gh workflow run tinfoil-release-publish.yml --ref "$VERSION"

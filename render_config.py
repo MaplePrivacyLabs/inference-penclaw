@@ -14,15 +14,23 @@ MPK_PATTERN = r"([0-9a-f]{64})_([1-9][0-9]*)_([0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-
 STOCK_REPO = "moonshotai/Kimi-K3.1-Pro@6d0a0202956796543364d666ab19c6ad1a494ee1"
 STOCK_MPK = "8d9c355a94e60f43598713759028328bbe795336f2700799d0ff4f3898e785e0_1561355993088_97fb42e4-45a9-5745-813b-61cb6ddb043d"
 STOCK_CONFIG_SHA256 = "2400260beabc0fe45b1c959a29c1401fbd703d6b233efa7de883eccba29de68b"
-# Performance experiments on the staging node (see EXPERIMENTS.md). Each entry is
-# (text in stock v0.0.3, text in this template). Undoing every entry must give
-# back the stock configuration exactly, so the template can only differ from
-# stock in the ways listed here and in the primary model fields.
-EXPERIMENT_EDITS = [
+IMAGE = "ghcr.io/mapleprivacylabs/inference-penclaw"
+STOCK_IMAGE = "ghcr.io/tinfoilsh/confidential-kimi-k31-pro@sha256:0a81868bb275945f23e0e71d53524dd9a416bfcde3acb14903af0c2139495bc0"
+# The source template names the image without a digest. The release workflow
+# builds the image and writes the pinned line into the tagged configuration.
+IMAGE_TEMPLATE_LINE = f'  image: "{IMAGE}:build-required" # source template; the release workflow pins the built digest\n'
+IMAGE_PINNED_LINE = rf'  image: "{re.escape(IMAGE)}@sha256:[0-9a-f]{{64}}" # v(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\n'
+# Every difference from stock v0.0.3 besides the primary model fields (see
+# CHANGES.md). Each entry is (text in stock, text in this template). Undoing
+# every entry must give back the stock configuration exactly, so the template
+# cannot differ from stock in any way that is not listed here.
+EDITS = [
     ("cpus: 32\n", "cpus: 120\n"),
-    ("  - /health\n", "  - /health\n  - /metrics\n"),
     ('"num_speculative_tokens":5', '"num_speculative_tokens":3'),
-    ("  - /v1/responses\n", "  - /v1/responses\n  - /v1/messages\n  - /v1/messages/count_tokens\n"),
+    (f'  image: "{STOCK_IMAGE}" # v0.0.2\n', IMAGE_TEMPLATE_LINE),
+    ("  - --port\n  - '8001'\n", "  - --middleware\n  - maple_metrics_auth.MetricsAuthMiddleware\n  - --port\n  - '8001'\n"),
+    ("  - /health\n", "  - /health\n  - /metrics\n"),
+    ("  - --served-model-name\n  - kimi-k3-1-pro\n", "  - --served-model-name\n  - kimi-k3-1-pro-uncensored\n"),
 ]
 
 
@@ -52,10 +60,10 @@ def render(mpk):
 
     template = (ROOT / "tinfoil-config.template.yml").read_bytes().decode("utf-8")
     stock = template
-    for stock_text, experiment_text in EXPERIMENT_EDITS:
-        if stock.count(experiment_text) != 1:
-            raise ValueError(f"Expected one experiment edit matching {experiment_text!r}")
-        stock = stock.replace(experiment_text, stock_text)
+    for stock_text, our_text in EDITS:
+        if stock.count(our_text) != 1:
+            raise ValueError(f"Expected one listed difference matching {our_text!r}")
+        stock = stock.replace(our_text, stock_text)
     stock_values = {
         f"repo: {REPO}@{REVISION}": f"repo: {STOCK_REPO}",
         "mpk: __PENCLAW_MPK__\n  schema: 2": f"mpk: {STOCK_MPK}\n  schema: 1",
@@ -66,7 +74,7 @@ def render(mpk):
             raise ValueError(f"Expected one primary model field matching {marker!r}")
         stock = stock.replace(marker, value)
     if hashlib.sha256(stock.encode("utf-8")).hexdigest() != STOCK_CONFIG_SHA256:
-        raise ValueError("Template differs from stock v0.0.3 outside the primary model fields and the listed experiment edits")
+        raise ValueError("Template differs from stock v0.0.3 outside the primary model fields and the listed differences")
 
     return template.replace("__PENCLAW_MPK__", mpk).replace("__PENCLAW_ROOT__", pack[1])
 
@@ -77,10 +85,15 @@ def main():
     mode.add_argument("--mpk", metavar="ROOT_OFFSET_UUID", help="Tuple from the completed schema-2 wrap")
     mode.add_argument("--check", action="store_true", help="Check the generated config is renderer-exact")
     parser.add_argument("--output", type=Path, default=ROOT / "tinfoil-config.yml")
+    parser.add_argument("--require-pinned-image", action="store_true", help="With --check: the config must pin a built image digest")
     args = parser.parse_args()
     try:
         if args.check:
             config = args.output.read_bytes().decode("utf-8")
+            # A tagged release carries the pinned image; the source carries the template line.
+            config, pinned = re.subn(IMAGE_PINNED_LINE, lambda _: IMAGE_TEMPLATE_LINE, config)
+            if pinned > 1 or (args.require_pinned_image and pinned != 1):
+                raise ValueError("Expected exactly one pinned image line for this repository's image")
             packs = re.findall(r"^  mpk: (\S+)$", config, re.MULTILINE)
             if len(packs) != 2 or config != render(packs[0]):
                 raise ValueError("Measured config must match the rendered primary and stock draft packs")

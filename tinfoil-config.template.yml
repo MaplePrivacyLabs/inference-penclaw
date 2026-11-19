@@ -13,7 +13,7 @@ models:
   schema: 1
 containers:
 - name: kimi-k3-1-pro
-  image: "ghcr.io/tinfoilsh/confidential-kimi-k31-pro@sha256:0a81868bb275945f23e0e71d53524dd9a416bfcde3acb14903af0c2139495bc0" # v0.0.2
+  image: "ghcr.io/mapleprivacylabs/inference-penclaw:build-required" # source template; the release workflow pins the built digest
   runtime: nvidia
   read_only: true
   gpus: all
@@ -50,7 +50,7 @@ containers:
   - --model
   - /tinfoil/mpk/mpk-__PENCLAW_ROOT__
   - --served-model-name
-  - kimi-k3-1-pro
+  - kimi-k3-1-pro-uncensored
   - --tensor-parallel-size
   - '8'
   - --decode-context-parallel-size
@@ -77,6 +77,8 @@ containers:
   - --trust-request-mm-kwargs
   - --scheduling-policy
   - priority
+  - --middleware
+  - maple_metrics_auth.MetricsAuthMiddleware
   - --port
   - '8001'
   - --max-model-len
@@ -118,7 +120,5 @@ shim:
   - /v1/chat/completions
   - /v1/models
   - /v1/responses
-  - /v1/messages
-  - /v1/messages/count_tokens
   - /health
   - /metrics
