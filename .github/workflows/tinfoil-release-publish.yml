@@ -30,18 +30,18 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Validate the tagged staging configuration
+      - name: Validate the tagged configuration
         shell: bash
         run: |
           git ls-files --error-unmatch tinfoil-config.yml >/dev/null
-          python3 render_config.py --check
+          python3 render_config.py --check --require-pinned-image
           git diff --exit-code -- tinfoil-config.yml
 
-      - name: Measure, attest, and publish the staging release
+      - name: Measure, attest, and publish the release
         uses: tinfoilsh/measure-image-action@59f7ab5dbe472b3097c888ebe64e6a4131fc0975 # v0.14.0
         with:
           config-file: ${{ github.workspace }}/tinfoil-config.yml
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          # Publish the isolated staging release as latest so Tinfoil can
-          # issue a freshness witness for its deployment digest.
+          # Publish the release as latest so Tinfoil can issue a freshness
+          # witness for its deployment digest.
           mark-as-latest: 'true'
